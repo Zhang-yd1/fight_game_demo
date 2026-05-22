@@ -7,11 +7,14 @@ from config import (
     ATTACK_DURATION, ATTACK_COOLDOWN,
     HIT_FLASH_FRAMES, HUD_BAR_W, HUD_BAR_H,
     MAX_BLOCK_HEALTH, CHIP_DAMAGE_RATIO, GUARD_BREAK_STUN,
+    KNOCKBACK_FRICTION, KNOCKBACK_CORNER_MARGIN, KNOCKBACK_CORNER_FACTOR,
     WHITE, DARK_GRAY, GREEN, YELLOW, ORANGE, GRAY,
 )
 from animation import Animator
 from fighter_animations import make_fighter_animator
 from collision import CollisionBox
+from move_data import MoveData, DEFAULT_MOVE
+from action_fsm import ActionFSM, ActionState, TECH_WINDOW, TECH_RECOVERY
 
 
 class Fighter:
@@ -32,16 +35,28 @@ class Fighter:
         self.facing_right = facing_right
 
         self.health = MAX_HEALTH
-        self.attack_timer = 0
         self.attack_cooldown = 0
         self.hit_flash = 0
         self.dead = False
 
+        # ── 帧数据 / 招式状态机 ──
+        self.current_move: MoveData | None = None
+        self.move_frame = 0                     # 当前招式内的帧号（0-indexed）
+        self.connected_hit_ids: set[int] = set()  # 本次招式已命中的 hit_id
+
         # ── 防御系统 ──
-        self.is_blocking = False      # 本帧是否处于防御姿态
-        self.blockstun = 0            # 防御硬直（不可行动）
+        self.is_blocking = False
+        self.blockstun = 0
         self.block_health = MAX_BLOCK_HEALTH
         self.guard_broken = False
+
+        # ── 硬直系统 ──
+        self.hitstun = 0
+        self.hitstop = 0
+        self.knockback_vel = 0.0
+
+        # 动作状态机
+        self.fsm = ActionFSM()
 
         # 动画系统
         self.animator: Animator = make_fighter_animator()
@@ -55,20 +70,33 @@ class Fighter:
         return pygame.Rect(int(self.x), int(self.y), FIGHTER_W, FIGHTER_H)
 
     @property
+    def attack_timer(self) -> int:
+        """向后兼容：返回当前招式的剩余帧数"""
+        if self.current_move is None:
+            return 0
+        return self.current_move.total_frames - self.move_frame
+
+    @property
     def current_hitboxes(self) -> list:
         """当前帧的 hitbox 列表"""
-        frame = self.animator.current_frame
-        if frame is None:
+        if self.current_move is not None:
+            phase = self.current_move.get_phase(self.move_frame)
+            if phase is not None and phase.stage == "active":
+                return phase.hitboxes
             return []
-        return frame.hitboxes
+        frame = self.animator.current_frame
+        return frame.hitboxes if frame else []
 
     @property
     def current_hurtboxes(self) -> list:
         """当前帧的 hurtbox 列表"""
-        frame = self.animator.current_frame
-        if frame is None:
+        if self.current_move is not None:
+            phase = self.current_move.get_phase(self.move_frame)
+            if phase is not None:
+                return phase.hurtboxes
             return []
-        return frame.hurtboxes
+        frame = self.animator.current_frame
+        return frame.hurtboxes if frame else []
 
     # ── 物理 ──
 
@@ -81,6 +109,8 @@ class Fighter:
             self.y = ground_surface_y
             self.vel_y = 0
             self.on_ground = True
+        else:
+            self.on_ground = False
 
     def clamp_to_screen(self):
         self.x = max(0.0, min(float(SCREEN_W - FIGHTER_W), self.x))
@@ -97,16 +127,35 @@ class Fighter:
             self.on_ground = False
 
     def attack(self):
-        if self.attack_cooldown == 0 and self.attack_timer == 0:
-            self.attack_timer = ATTACK_DURATION
-            self.attack_cooldown = ATTACK_COOLDOWN
-            self.animator.play("attack")
+        """向后兼容：使用默认招式"""
+        if DEFAULT_MOVE is not None:
+            self.start_move(DEFAULT_MOVE)
 
-    def take_damage(self, amount: int):
+    def start_move(self, move: MoveData):
+        if self.attack_cooldown > 0:
+            return
+        if self.current_move is not None:
+            if not self.fsm.can_cancel_into(self, move.name):
+                return
+        elif not self.is_actionable():
+            return
+        self.current_move = move
+        self.move_frame = 0
+        self.attack_cooldown = ATTACK_COOLDOWN
+        self.connected_hit_ids.clear()
+        self.animator.play("attack")
+
+    def take_damage(self, amount: int, hitstun: int = 0,
+                    knockback_x: float = 0.0, knockback_y: float = 0.0,
+                    hitstop: int = 0):
         if self.dead:
             return
         self.health = max(0, self.health - amount)
         self.hit_flash = HIT_FLASH_FRAMES
+        self.hitstun = hitstun
+        self.hitstop = hitstop
+        self.knockback_vel = knockback_x
+        self.vel_y = knockback_y
         if self.health == 0:
             self.dead = True
 
@@ -114,10 +163,7 @@ class Fighter:
 
     def is_actionable(self) -> bool:
         """是否可行动（不在任何硬直中）"""
-        return (self.blockstun == 0
-                and self.attack_timer == 0
-                and not self.dead
-                and not self.guard_broken)
+        return self.fsm.can_act()
 
     def check_blocking(self, attacker_x: float,
                        holding_left: bool, holding_right: bool):
@@ -161,11 +207,35 @@ class Fighter:
             return True
         return False
 
+    def try_tech(self, holding_dir: bool):
+        """受身：hitstun 最后 TECH_WINDOW 帧内按住方向键可提前恢复"""
+        if self.fsm.can_tech(self, holding_dir):
+            self.hitstun = max(0, self.hitstun - TECH_RECOVERY)
+
     # ── 每帧更新 ──
 
     def update(self):
-        self.apply_gravity()
-        self.x += self.vel_x
+        # hitstop 期间位置冻结，但计时器照常推进
+        if self.hitstop > 0:
+            self.hitstop -= 1
+        else:
+            self.apply_gravity()
+            self.x += self.vel_x
+
+            # 击退（摩擦力衰减 + 版边衰减）
+            if abs(self.knockback_vel) > 0.01:
+                # 版边击退衰减：防止无限连
+                near_left = (self.x < KNOCKBACK_CORNER_MARGIN
+                             and self.knockback_vel < 0)
+                near_right = (self.x > SCREEN_W - FIGHTER_W - KNOCKBACK_CORNER_MARGIN
+                              and self.knockback_vel > 0)
+                if near_left or near_right:
+                    self.knockback_vel *= KNOCKBACK_CORNER_FACTOR
+                self.x += self.knockback_vel
+                self.knockback_vel *= KNOCKBACK_FRICTION
+            else:
+                self.knockback_vel = 0.0
+
         self.clamp_to_screen()
 
         # 移动检测（用于走路动画）
@@ -173,18 +243,25 @@ class Fighter:
         self._prev_x = self.x
 
         # 递减计时器
-        if self.attack_timer > 0:
-            self.attack_timer -= 1
+        if self.current_move is not None:
+            self.move_frame += 1
+            if self.move_frame >= self.current_move.total_frames:
+                self.current_move = None
+                self.move_frame = 0
         if self.attack_cooldown > 0:
             self.attack_cooldown -= 1
         if self.hit_flash > 0:
             self.hit_flash -= 1
+        if self.hitstun > 0:
+            self.hitstun -= 1
         if self.blockstun > 0:
             self.blockstun -= 1
             if self.blockstun == 0 and self.guard_broken:
-                # 破防大硬直结束，恢复防御槽
                 self.guard_broken = False
                 self.block_health = MAX_BLOCK_HEALTH
+
+        # 同步动作状态机
+        self.fsm.sync(self)
 
         # 推进动画
         self.animator.tick()
@@ -192,18 +269,19 @@ class Fighter:
     # ── 绘制 ──
 
     def _anim_state(self) -> str:
-        """根据 Fighter 状态返回动画名"""
+        """根据 FSM 状态返回动画名"""
         if self.hit_flash > 0:
             return "hit"
-        if self.attack_timer > 0:
+        s = self.fsm.state
+        if s == ActionState.ATTACK:
             return "attack"
-        if self.blockstun > 0:
+        if s.is_stunned:
             return "hit"
-        if not self.on_ground:
+        if s == ActionState.JUMP:
             return "jump"
-        if self.is_blocking:
+        if s == ActionState.BLOCK:
             return "block"
-        if self._moving:
+        if s == ActionState.WALK:
             return "walk"
         return "idle"
 

@@ -106,6 +106,11 @@ print("Test 6: Attack collision")
 ctx.p1, ctx.p2, _ = make_fighters()
 ctx.p2.x = ctx.p1.x + 55
 ctx.p1.attack()
+# 推进启动帧（startup=4）
+for _ in range(4):
+    check_attack(ctx.p1, ctx.p2)
+    ctx.p1.update()
+# 现在进入 active 阶段
 check_attack(ctx.p1, ctx.p2)
 test("P2 took damage", ctx.p2.health < MAX_HEALTH, True)
 

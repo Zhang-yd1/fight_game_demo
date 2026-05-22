@@ -45,6 +45,12 @@
         "hit_flash_frames": 8
     },
 
+    "knockback": {
+        "friction": 0.85,
+        "corner_margin": 80,
+        "corner_factor": 0.5
+    },
+
     "block": {
         "max_block_health": 100,
         "chip_damage_ratio": 0.15,

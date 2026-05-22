@@ -7,11 +7,12 @@ import pygame
 from config import (
     SCREEN_W, SCREEN_H, FPS, ROUND_DURATION_SECS,
     BLUE, RED, DARK_BLUE, DARK_RED, GRAY,
-    ATTACK_DAMAGE, ATTACK_DURATION, FIGHTER_W,
+    FIGHTER_W,
 )
 from fighter import Fighter
 from input_system import Action
 from collision import check_hitbox_hurtbox
+from action_fsm import TECH_RECOVERY
 from render import (
     draw_background, draw_hud, draw_result,
     draw_menu, draw_pause_overlay,
@@ -83,9 +84,12 @@ def make_fighters() -> tuple:
 
 
 def check_attack(attacker: Fighter, defender: Fighter):
-    """攻击首帧：hitbox ∩ hurtbox 碰撞检测，处理防御/命中"""
-    if attacker.attack_timer != ATTACK_DURATION:
+    """每帧：检查攻击方 active 阶段的 hitbox 是否命中防守方 hurtbox"""
+    if attacker.current_move is None:
         return
+    if not attacker.current_move.is_active(attacker.move_frame):
+        return
+
     hitbox = check_hitbox_hurtbox(
         attacker.current_hitboxes, defender.current_hurtboxes,
         attacker.x, attacker.y, attacker.facing_right, FIGHTER_W,
@@ -93,10 +97,28 @@ def check_attack(attacker: Fighter, defender: Fighter):
     )
     if hitbox is None:
         return
+    # 防止同一 hit_id 在本次招式中重复命中
+    if hitbox.hit_id in attacker.connected_hit_ids:
+        return
+
+    attacker.connected_hit_ids.add(hitbox.hit_id)
+
+    # 击退方向：始终远离攻击方面向
+    kb_x = hitbox.knockback_x if attacker.facing_right else -hitbox.knockback_x
+
     if defender.is_blocking:
         defender.apply_block(hitbox)
+        # 防御也有 hitstop（较短）
+        a_stop = hitbox.attacker_hitstop if hitbox.attacker_hitstop > 0 else hitbox.hitstop
+        attacker.hitstop = max(1, a_stop // 2)
+        defender.hitstop = max(1, hitbox.hitstop // 2)
     else:
-        defender.take_damage(hitbox.damage)
+        defender.take_damage(
+            hitbox.damage, hitbox.hitstun,
+            kb_x, hitbox.knockback_y, hitbox.hitstop,
+        )
+        a_stop = hitbox.attacker_hitstop if hitbox.attacker_hitstop > 0 else hitbox.hitstop
+        attacker.hitstop = a_stop
 
 
 # ═══════════════════════════════════════════════
@@ -131,23 +153,27 @@ class FightState(GameState):
         if p1.just_pressed(Action.PAUSE) or p2.just_pressed(Action.PAUSE):
             return StateID.PAUSE
 
-        # ── 玩家1 输入（硬直中不可行动）──
-        if ctx.p1.is_actionable():
+        # ── 玩家1 输入 ──
+        # 移动：地面状态允许（含防御姿态后退）
+        if ctx.p1.fsm.state.is_grounded:
             if p1.is_held(Action.MOVE_LEFT):
                 ctx.p1.move(-1)
             if p1.is_held(Action.MOVE_RIGHT):
                 ctx.p1.move(+1)
+        # 攻击 / 跳跃：仅完全可行动时
+        if ctx.p1.is_actionable():
             if p1.just_pressed(Action.JUMP):
                 ctx.p1.jump()
             if p1.is_held(Action.ATTACK):
                 ctx.p1.attack()
 
         # ── 玩家2 输入 ──
-        if ctx.p2.is_actionable():
+        if ctx.p2.fsm.state.is_grounded:
             if p2.is_held(Action.MOVE_LEFT):
                 ctx.p2.move(-1)
             if p2.is_held(Action.MOVE_RIGHT):
                 ctx.p2.move(+1)
+        if ctx.p2.is_actionable():
             if p2.just_pressed(Action.JUMP):
                 ctx.p2.jump()
             if p2.is_held(Action.ATTACK):
@@ -180,6 +206,10 @@ class FightState(GameState):
         else:
             ctx.p1.facing_right = False
             ctx.p2.facing_right = True
+
+        # ── 受身检测 ──
+        ctx.p1.try_tech(p1.is_held(Action.MOVE_LEFT) or p1.is_held(Action.MOVE_RIGHT))
+        ctx.p2.try_tech(p2.is_held(Action.MOVE_LEFT) or p2.is_held(Action.MOVE_RIGHT))
 
         # ── 倒计时 ──
         ctx.round_timer -= 1

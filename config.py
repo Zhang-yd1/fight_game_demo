@@ -59,6 +59,12 @@ ATTACK_ARM_W        = _cfg['attack']['arm_width']
 ATTACK_ARM_H        = _cfg['attack']['arm_height']
 HIT_FLASH_FRAMES    = _cfg['attack']['hit_flash_frames']
 
+# ── 击退 ──
+
+KNOCKBACK_FRICTION  = _cfg['knockback']['friction']
+KNOCKBACK_CORNER_MARGIN = _cfg['knockback']['corner_margin']
+KNOCKBACK_CORNER_FACTOR = _cfg['knockback']['corner_factor']
+
 # ── 防御 ──
 
 MAX_BLOCK_HEALTH    = _cfg['block']['max_block_health']

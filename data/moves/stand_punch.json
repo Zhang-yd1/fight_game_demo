@@ -1,0 +1,47 @@
+{
+    "name": "Stand Punch",
+    "startup": 4,
+    "active": 3,
+    "recovery": 5,
+    "frames": [
+        {
+            "stage": "startup",
+            "duration": 4,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78, "type": "hurt"}
+            ]
+        },
+        {
+            "stage": "active",
+            "duration": 3,
+            "hitboxes": [
+                {
+                    "offset_x": 50, "offset_y": 20, "width": 40, "height": 20,
+                    "type": "hit",
+                    "damage": 8,
+                    "knockback_x": 3.0, "knockback_y": -2.0,
+                    "hitstun": 16, "blockstun": 10, "hitstop": 8,
+                    "chip_damage": 0,
+                    "attacker_hitstop": 8,
+                    "hit_id": 0
+                }
+            ],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78, "type": "hurt"}
+            ]
+        },
+        {
+            "stage": "recovery",
+            "duration": 5,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78, "type": "hurt"}
+            ]
+        }
+    ],
+    "cancel_into": [],
+    "cancel_window": [0, 0],
+    "on_hit": 3,
+    "on_block": -2
+}
