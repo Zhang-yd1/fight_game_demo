@@ -1,0 +1,74 @@
+{
+  "name": "Jump LP",
+  "startup": 3,
+  "active": 4,
+  "recovery": 0,
+  "frames": [
+    {
+      "stage": "startup",
+      "duration": 3,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "active",
+      "duration": 4,
+      "hitboxes": [
+        {
+          "offset_x": 45,
+          "offset_y": 5,
+          "width": 35,
+          "height": 30,
+          "type": "hit",
+          "damage": 5,
+          "knockback_x": 1.5,
+          "knockback_y": -1.0,
+          "hitstun": 10,
+          "blockstun": 7,
+          "hitstop": 5,
+          "chip_damage": 0,
+          "attacker_hitstop": 5,
+          "hit_id": 0
+        }
+      ],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "duration": 0,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    }
+  ],
+  "cancel_into": [],
+  "cancel_window": [
+    0,
+    0
+  ],
+  "on_hit": 0,
+  "on_block": 0
+}

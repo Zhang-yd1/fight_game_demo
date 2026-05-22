@@ -1,0 +1,50 @@
+{
+    "name": "波动拳",
+    "type": "special",
+    "input": "qcf_p",
+    "startup": 10,
+    "active": 12,
+    "recovery": 20,
+    "meter_gain": 4,
+    "cancel_into": ["qcf_qcf_p"],
+    "cancel_window": [10, 22],
+    "on_hit": -2,
+    "on_block": -8,
+    "frames": [
+        {
+            "stage": "startup",
+            "duration": 10,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "active",
+            "duration": 12,
+            "hitboxes": [
+                {
+                    "offset_x": 50, "offset_y": 15,
+                    "width": 44, "height": 30,
+                    "type": "projectile",
+                    "damage": 35,
+                    "knockback_x": 3.0, "knockback_y": -2.0,
+                    "hitstun": 18, "blockstun": 10, "hitstop": 10,
+                    "chip_damage": 5, "attacker_hitstop": 8,
+                    "hit_id": 0
+                }
+            ],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "recovery",
+            "duration": 20,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        }
+    ]
+}

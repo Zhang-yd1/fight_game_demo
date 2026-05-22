@@ -1,0 +1,51 @@
+{
+    "name": "升龙拳",
+    "type": "special",
+    "input": "dp_p",
+    "startup": 5,
+    "active": 8,
+    "recovery": 28,
+    "meter_gain": 4,
+    "cancel_into": ["qcf_qcf_p"],
+    "cancel_window": [5, 13],
+    "on_hit": -10,
+    "on_block": -22,
+    "frames": [
+        {
+            "stage": "startup",
+            "duration": 5,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ],
+            "invincible": true
+        },
+        {
+            "stage": "active",
+            "duration": 8,
+            "hitboxes": [
+                {
+                    "offset_x": 30, "offset_y": -20,
+                    "width": 25, "height": 40,
+                    "type": "hit",
+                    "damage": 50,
+                    "knockback_x": 4.0, "knockback_y": -6.0,
+                    "hitstun": 24, "blockstun": 14, "hitstop": 12,
+                    "chip_damage": 8, "attacker_hitstop": 10,
+                    "hit_id": 0
+                }
+            ],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 60}
+            ]
+        },
+        {
+            "stage": "recovery",
+            "duration": 28,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        }
+    ]
+}

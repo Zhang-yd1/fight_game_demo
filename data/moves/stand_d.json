@@ -1,0 +1,74 @@
+{
+  "name": "Stand HK",
+  "startup": 9,
+  "active": 4,
+  "recovery": 12,
+  "frames": [
+    {
+      "stage": "startup",
+      "duration": 9,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "active",
+      "duration": 4,
+      "hitboxes": [
+        {
+          "offset_x": 55,
+          "offset_y": 30,
+          "width": 45,
+          "height": 25,
+          "type": "hit",
+          "damage": 14,
+          "knockback_x": 5.0,
+          "knockback_y": -4.0,
+          "hitstun": 20,
+          "blockstun": 14,
+          "hitstop": 12,
+          "chip_damage": 0,
+          "attacker_hitstop": 12,
+          "hit_id": 0
+        }
+      ],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "duration": 12,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    }
+  ],
+  "cancel_into": [],
+  "cancel_window": [
+    0,
+    0
+  ],
+  "on_hit": 0,
+  "on_block": 0
+}

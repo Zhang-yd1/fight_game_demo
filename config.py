@@ -65,6 +65,32 @@ KNOCKBACK_FRICTION  = _cfg['knockback']['friction']
 KNOCKBACK_CORNER_MARGIN = _cfg['knockback']['corner_margin']
 KNOCKBACK_CORNER_FACTOR = _cfg['knockback']['corner_factor']
 
+# ── 移动 ──
+
+DASH_SPEED          = _cfg['movement']['dash_speed']
+DASH_DURATION       = _cfg['movement']['dash_duration']
+BACKDASH_DURATION   = _cfg['movement']['backdash_duration']
+BACKDASH_INVULN     = _cfg['movement']['backdash_invuln']
+DASH_INPUT_WINDOW   = _cfg['movement']['dash_input_window']
+HOP_THRESHOLD       = _cfg['movement']['hop_threshold']
+HOP_VEL_Y           = _cfg['movement']['hop_vel_y']
+SUPER_JUMP_VEL_Y    = _cfg['movement']['super_jump_vel_y']
+RUN_JUMP_H_SPEED    = _cfg['movement']['run_jump_h_speed']
+
+# ── 能量系统 ──
+
+METER_PER_STOCK       = _cfg['power']['meter_per_stock']
+MAX_POWER_STOCKS      = _cfg['power']['max_stocks']
+METER_GAIN_HIT        = _cfg['power']['meter_gain_hit']
+METER_GAIN_GOT_HIT    = _cfg['power']['meter_gain_got_hit']
+METER_GAIN_BLOCK      = _cfg['power']['meter_gain_block']
+METER_GAIN_SPECIAL    = _cfg['power']['meter_gain_special']
+METER_GAIN_WALK       = _cfg['power']['meter_gain_walk']
+MAX_MODE_DURATION     = _cfg['power']['max_mode_duration']
+MAX_MODE_DAMAGE_MULT  = _cfg['power']['max_mode_damage_mult']
+MAX_MODE_DEFENSE_MULT = _cfg['power']['max_mode_defense_mult']
+MAX_HEALTH_THRESHOLD  = _cfg['power']['max_health_threshold']
+
 # ── 防御 ──
 
 MAX_BLOCK_HEALTH    = _cfg['block']['max_block_health']
@@ -131,3 +157,7 @@ def _build_key_config(player_key: str) -> KeyConfig:
 
 PLAYER1_KEY_CONFIG = _build_key_config('player1')
 PLAYER2_KEY_CONFIG = _build_key_config('player2')
+
+# 将 dash 输入窗口同步到 input_system 模块
+import input_system
+input_system.DASH_INPUT_WINDOW = DASH_INPUT_WINDOW

@@ -4,6 +4,7 @@ import pygame
 from config import (
     SCREEN_W, SCREEN_H, GROUND_Y, FPS, HUD_TOP_MARGIN, HUD_BAR_W,
     BLUE, RED, WHITE, YELLOW,
+    METER_PER_STOCK, MAX_POWER_STOCKS, GREEN, ORANGE,
 )
 from fighter import Fighter
 
@@ -52,10 +53,12 @@ def draw_hud(surface: pygame.Surface,
     p1_name = font.render(p1.name, True, BLUE)
     surface.blit(p1_name, (10, 5))
     p1.draw_health_bar(surface, 10, 28, flip=False)
+    _draw_power_gauge(surface, p1, 10, 52, flip=False)
 
     p2_name = font.render(p2.name, True, RED)
     surface.blit(p2_name, (SCREEN_W - p2_name.get_width() - 10, 5))
     p2.draw_health_bar(surface, SCREEN_W - HUD_BAR_W - 10, 28, flip=True)
+    _draw_power_gauge(surface, p2, SCREEN_W - HUD_BAR_W - 10, 52, flip=True)
 
     secs = max(0, round_time // FPS)
     timer_color = RED if secs <= 10 else WHITE
@@ -97,6 +100,36 @@ def draw_menu(surface: pygame.Surface, fonts: dict):
     quit_hint = fonts['guide'].render("按 ESC 退出", True, WHITE)
     qx = SCREEN_W // 2 - quit_hint.get_width() // 2
     surface.blit(quit_hint, (qx, SCREEN_H // 2 + 60))
+
+
+def _draw_power_gauge(surface: pygame.Surface, fighter,
+                      bar_x: int, bar_y: int, flip: bool = False):
+    """绘制能量槽圆点（KOF 风格）"""
+    dot_r = 5
+    gap = 6
+    stocks = fighter.power_stocks
+    max_stocks = MAX_POWER_STOCKS
+
+    for i in range(max_stocks):
+        dx = bar_x + i * (dot_r * 2 + gap) if not flip \
+            else bar_x + HUD_BAR_W - (i + 1) * (dot_r * 2 + gap) + gap
+        dy = bar_y
+        filled = i < stocks
+        # MAX 模式下闪烁
+        if fighter.max_mode:
+            filled = filled and (pygame.time.get_ticks() // 200) % 2 == 0
+        color = YELLOW if filled else (60, 60, 60)
+        if fighter.max_mode and filled:
+            color = ORANGE
+        pygame.draw.circle(surface, color, (dx + dot_r, dy + dot_r), dot_r)
+        pygame.draw.circle(surface, (80, 80, 80), (dx + dot_r, dy + dot_r), dot_r, 1)
+
+    # MAX 模式文字提示
+    if fighter.max_mode:
+        small = pygame.font.SysFont("Arial", 11, bold=True)
+        txt = small.render("MAX", True, ORANGE)
+        tx = bar_x + HUD_BAR_W + 8 if not flip else bar_x - txt.get_width() - 8
+        surface.blit(txt, (tx, bar_y))
 
 
 def draw_pause_overlay(surface: pygame.Surface, fonts: dict):

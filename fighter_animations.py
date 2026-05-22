@@ -126,6 +126,55 @@ def draw_hit_2(surface, x, y, facing_right, color, dark_color, **_):
     _draw_arms_down(surface, x, y, facing_right, color, dark_color)
 
 
+def draw_crouch(surface, x, y, facing_right, color, dark_color, **_):
+    """蹲姿：身体压低，legs 缩短"""
+    crouch_y = y + 20
+    # 压低的上半身
+    pygame.draw.rect(surface, color, (x + 10, crouch_y + 15, 30, 25))
+    pygame.draw.rect(surface, dark_color, (x + 10, crouch_y + 15, 30, 25), 2)
+    # 头
+    pygame.draw.circle(surface, color, (x + 25, crouch_y + 12), 12)
+    pygame.draw.circle(surface, dark_color, (x + 25, crouch_y + 12), 12, 2)
+    eye_off = 6 if facing_right else -6
+    pygame.draw.circle(surface, dark_color, (x + 25 + eye_off, crouch_y + 10), 3)
+    # 短腿
+    pygame.draw.rect(surface, color, (x + 12, crouch_y + 38, 12, 10))
+    pygame.draw.rect(surface, dark_color, (x + 12, crouch_y + 38, 12, 10), 2)
+    pygame.draw.rect(surface, color, (x + 26, crouch_y + 38, 12, 10))
+    pygame.draw.rect(surface, dark_color, (x + 26, crouch_y + 38, 12, 10), 2)
+
+
+def draw_dash(surface, x, y, facing_right, color, dark_color, **_):
+    """前冲：身体前倾，后腿蹬地"""
+    lean = 4 if facing_right else -4
+    _draw_body(surface, x + lean, y, color, dark_color)
+    _draw_head(surface, x + lean, y, facing_right, color, dark_color)
+    # 前腿蹬后腿伸
+    if facing_right:
+        pygame.draw.rect(surface, color, (x + 8,       y + 58, 12, 24))
+        pygame.draw.rect(surface, dark_color, (x + 8,  y + 58, 12, 24), 2)
+        pygame.draw.rect(surface, color, (x + 30,       y + 58, 12, 20))
+        pygame.draw.rect(surface, dark_color, (x + 30,  y + 58, 12, 20), 2)
+        pygame.draw.rect(surface, color, (x + 38, y + 28, 12, 18))
+        pygame.draw.rect(surface, dark_color, (x + 38, y + 28, 12, 18), 2)
+    else:
+        pygame.draw.rect(surface, color, (x + 30,       y + 58, 12, 24))
+        pygame.draw.rect(surface, dark_color, (x + 30,  y + 58, 12, 24), 2)
+        pygame.draw.rect(surface, color, (x + 8,       y + 58, 12, 20))
+        pygame.draw.rect(surface, dark_color, (x + 8,  y + 58, 12, 20), 2)
+        pygame.draw.rect(surface, color, (x, y + 28, 12, 18))
+        pygame.draw.rect(surface, dark_color, (x, y + 28, 12, 18), 2)
+
+
+def draw_backdash(surface, x, y, facing_right, color, dark_color, **_):
+    """后撤步：身体后仰，手臂后摆"""
+    lean = -4 if facing_right else 4
+    _draw_body(surface, x + lean, y, color, dark_color)
+    _draw_head(surface, x + lean, y, facing_right, color, dark_color)
+    _draw_legs(surface, x + lean, y, color, dark_color, leg_off=4)
+    _draw_arms_down(surface, x + lean, y, facing_right, color, dark_color)
+
+
 # ═══════════════════════════════════════════════
 # 构建战士 Animator
 # ═══════════════════════════════════════════════
@@ -169,9 +218,30 @@ def make_fighter_animator() -> Animator:
                   hurtboxes=[BODY_HURTBOX]),
     ], loop=True))
 
-    # 防御 — 目前复用空闲姿态（后续可替换为防御专属帧）
+    # 防御 — 目前复用空闲姿态
     animator.add("block", Anim("block", [
         AnimFrame(draw_idle, duration=60,
+                  hurtboxes=[BODY_HURTBOX]),
+    ], loop=True))
+
+    # 蹲姿 — 缩小 hurtbox
+    CROUCH_HURTBOX = CollisionBox(
+        offset_x=10, offset_y=20, width=30, height=48, type="hurt",
+    )
+    animator.add("crouch", Anim("crouch", [
+        AnimFrame(draw_crouch, duration=60,
+                  hurtboxes=[CROUCH_HURTBOX]),
+    ], loop=True))
+
+    # 前冲 — 单帧（后续可扩展为多帧）
+    animator.add("dash", Anim("dash", [
+        AnimFrame(draw_dash, duration=60,
+                  hurtboxes=[BODY_HURTBOX]),
+    ], loop=True))
+
+    # 后撤步 — 单帧
+    animator.add("backdash", Anim("backdash", [
+        AnimFrame(draw_backdash, duration=60,
                   hurtboxes=[BODY_HURTBOX]),
     ], loop=True))
 

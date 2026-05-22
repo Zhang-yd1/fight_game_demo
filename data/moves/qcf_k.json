@@ -1,0 +1,50 @@
+{
+    "name": "波动脚",
+    "type": "special",
+    "input": "qcf_k",
+    "startup": 8,
+    "active": 10,
+    "recovery": 18,
+    "meter_gain": 4,
+    "cancel_into": [],
+    "cancel_window": [0, 0],
+    "on_hit": -4,
+    "on_block": -10,
+    "frames": [
+        {
+            "stage": "startup",
+            "duration": 8,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "active",
+            "duration": 10,
+            "hitboxes": [
+                {
+                    "offset_x": 50, "offset_y": 40,
+                    "width": 40, "height": 25,
+                    "type": "hit",
+                    "damage": 30,
+                    "knockback_x": 2.5, "knockback_y": -1.0,
+                    "hitstun": 16, "blockstun": 8, "hitstop": 8,
+                    "chip_damage": 5, "attacker_hitstop": 6,
+                    "hit_id": 0
+                }
+            ],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "recovery",
+            "duration": 18,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        }
+    ]
+}

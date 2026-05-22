@@ -51,6 +51,32 @@
         "corner_factor": 0.5
     },
 
+    "movement": {
+        "dash_speed": 7.0,
+        "dash_duration": 18,
+        "backdash_duration": 24,
+        "backdash_invuln": 8,
+        "dash_input_window": 20,
+        "hop_threshold": 4,
+        "hop_vel_y": -10.0,
+        "super_jump_vel_y": -20.0,
+        "run_jump_h_speed": 3.0
+    },
+
+    "power": {
+        "meter_per_stock": 128,
+        "max_stocks": 3,
+        "meter_gain_hit": 8,
+        "meter_gain_got_hit": 10,
+        "meter_gain_block": 5,
+        "meter_gain_special": 4,
+        "meter_gain_walk": 1,
+        "max_mode_duration": 600,
+        "max_mode_damage_mult": 1.25,
+        "max_mode_defense_mult": 0.75,
+        "max_health_threshold": 0.25
+    },
+
     "block": {
         "max_block_health": 100,
         "chip_damage_ratio": 0.15,
@@ -71,8 +97,12 @@
         "player1": {
             "move_left":    "a",
             "move_right":   "d",
-            "jump":         "w",
-            "attack":       "f",
+            "move_up":      "w",
+            "move_down":    "s",
+            "light_punch":  "j",
+            "light_kick":   "k",
+            "heavy_punch":  "u",
+            "heavy_kick":   "i",
             "pause":        "escape",
             "confirm":      "return",
             "cancel":       "escape",
@@ -82,8 +112,12 @@
         "player2": {
             "move_left":    "left",
             "move_right":   "right",
-            "jump":         "up",
-            "attack":       "kp0",
+            "move_up":      "up",
+            "move_down":    "down",
+            "light_punch":  "kp1",
+            "light_kick":   "kp2",
+            "heavy_punch":  "kp4",
+            "heavy_kick":   "kp5",
             "pause":        "escape",
             "confirm":      "return",
             "cancel":       "escape",

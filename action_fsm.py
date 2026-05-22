@@ -7,11 +7,18 @@ class ActionState(Enum):
     """战士当前动作状态（单一来源，替代散落的 bool 标志）"""
     IDLE = auto()          # 站立待机
     WALK = auto()          # 地面行走
-    JUMP = auto()          # 空中
+    CROUCH = auto()        # 蹲姿
+    JUMP = auto()          # 普跳
+    HOP = auto()           # 小跳（轻点上）
+    SUPER_JUMP = auto()    # 超跳（↓→↑ 或跑跳）
+    DASH = auto()          # 前冲
+    BACKDASH = auto()      # 后撤步
+    DODGE = auto()         # 紧急回避（A+B）
     ATTACK = auto()        # 攻击中（startup / active / recovery）
     HITSTUN = auto()       # 受击硬直
     BLOCKSTUN = auto()     # 防御硬直
-    BLOCK = auto()         # 主动防御（未受击）
+    BLOCK = auto()         # 主动站防（未受击）
+    CROUCH_BLOCK = auto()  # 蹲防
     GUARD_BROKEN = auto()  # 破防大硬直
     DEAD = auto()          # 死亡
 
@@ -25,14 +32,22 @@ class ActionState(Enum):
 
     @property
     def is_grounded(self) -> bool:
-        """是否可进行地面操作"""
+        """是否可进行地面操作（含蹲姿和防御）"""
         return self in (ActionState.IDLE, ActionState.WALK,
-                        ActionState.BLOCK)
+                        ActionState.CROUCH,
+                        ActionState.BLOCK, ActionState.CROUCH_BLOCK)
 
     @property
     def is_actionable(self) -> bool:
-        """是否可以接受新的行动输入"""
-        return self in (ActionState.IDLE, ActionState.WALK)
+        """是否可以接受新的攻击/跳跃输入（不含防御姿态）"""
+        return self in (ActionState.IDLE, ActionState.WALK,
+                        ActionState.CROUCH)
+
+    @property
+    def is_airborne(self) -> bool:
+        """是否在空中（跳跃/小跳/超跳）"""
+        return self in (ActionState.JUMP, ActionState.HOP,
+                        ActionState.SUPER_JUMP)
 
 
 class ActionFSM:
@@ -62,10 +77,24 @@ class ActionFSM:
             return ActionState.HITSTUN
         if f.current_move is not None:
             return ActionState.ATTACK
+        # dash/backdash/dodge are auto-movement states tracked by dash_timer
+        if f.dash_timer > 0:
+            if f._dash_dir < 0:
+                return ActionState.BACKDASH
+            return ActionState.DASH
+        # airborne states (set by jump variants)
+        if f._jump_type == "hop":
+            return ActionState.HOP
+        if f._jump_type == "super":
+            return ActionState.SUPER_JUMP
         if not f.on_ground:
             return ActionState.JUMP
+        if f.is_crouch_blocking:
+            return ActionState.CROUCH_BLOCK
         if f.is_blocking:
             return ActionState.BLOCK
+        if f.is_crouching:
+            return ActionState.CROUCH
         if f._moving:
             return ActionState.WALK
         return ActionState.IDLE
@@ -73,14 +102,23 @@ class ActionFSM:
     # ── 行动判定 ──
 
     def can_act(self) -> bool:
-        """是否可以接受移动 / 攻击输入"""
+        """是否可以接受攻击 / 跳跃输入"""
         return self.state.is_actionable
+
+    def can_move(self) -> bool:
+        """是否可以地面移动（蹲姿/蹲防下不可移动）"""
+        return self.state in (ActionState.IDLE, ActionState.WALK,
+                              ActionState.BLOCK)
 
     def can_block(self) -> bool:
         """是否可以进入防御姿态"""
         return self.state in (ActionState.IDLE, ActionState.WALK,
                               ActionState.BLOCK, ActionState.JUMP,
                               ActionState.BLOCKSTUN)
+
+    def can_dash_cancel(self) -> bool:
+        """dash/backdash 中是否可以取消为攻击"""
+        return self.state in (ActionState.DASH, ActionState.BACKDASH)
 
     def can_tech(self, fighter, holding_dir: bool) -> bool:
         """
@@ -98,17 +136,20 @@ class ActionFSM:
     def can_cancel_into(self, fighter, move_name: str) -> bool:
         """
         当前帧是否可以将当前动作取消为目标招式。
-        需要当前招式在 cancel 窗口内 且 目标在 cancel_into 列表中。
+        - ATTACK 状态：需在 cancel 窗口内且目标在 cancel_into 列表中
+        - DASH/BACKDASH：可取消为任意攻击（dash cancel）
         """
-        if self.state != ActionState.ATTACK:
+        if self.state == ActionState.ATTACK:
+            move = fighter.current_move
+            if move is None:
+                return False
+            frame = fighter.move_frame
+            win_start, win_end = move.cancel_window
+            if win_start <= frame <= win_end:
+                return move_name in move.cancel_into
             return False
-        move = fighter.current_move
-        if move is None:
-            return False
-        frame = fighter.move_frame
-        win_start, win_end = move.cancel_window
-        if win_start <= frame <= win_end:
-            return move_name in move.cancel_into
+        if self.state in (ActionState.DASH, ActionState.BACKDASH):
+            return True
         return False
 
 

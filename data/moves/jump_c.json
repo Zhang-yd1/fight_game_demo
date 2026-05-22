@@ -1,0 +1,74 @@
+{
+  "name": "Jump HP",
+  "startup": 5,
+  "active": 5,
+  "recovery": 0,
+  "frames": [
+    {
+      "stage": "startup",
+      "duration": 5,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "active",
+      "duration": 5,
+      "hitboxes": [
+        {
+          "offset_x": 40,
+          "offset_y": 0,
+          "width": 45,
+          "height": 35,
+          "type": "hit",
+          "damage": 10,
+          "knockback_x": 3.0,
+          "knockback_y": -3.0,
+          "hitstun": 16,
+          "blockstun": 10,
+          "hitstop": 8,
+          "chip_damage": 0,
+          "attacker_hitstop": 8,
+          "hit_id": 0
+        }
+      ],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "duration": 0,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 8,
+          "offset_y": 0,
+          "width": 34,
+          "height": 70,
+          "type": "hurt"
+        }
+      ]
+    }
+  ],
+  "cancel_into": [],
+  "cancel_window": [
+    0,
+    0
+  ],
+  "on_hit": 0,
+  "on_block": 0
+}

@@ -705,6 +705,13 @@ def apply_round_recovery(winner: Fighter):
 
 ### 10.1 角色定义 JSON
 
+> **路径规范**：所有招式 JSON 存放于 `data/moves/{char_id}/` 下。角色 JSON 中的招式引用使用该目录下的相对文件名，加载时自动拼接完整路径：
+> ```python
+> def load_char_move(char_id: str, move_file: str) -> MoveData:
+>     return load_move(f"{char_id}/{move_file}")
+> ```
+> 即 `"far_a": "far_a.json"` → `data/moves/kyo/far_a.json`。
+
 ```json
 // data/characters/kyo.json
 {
@@ -769,9 +776,313 @@ def apply_round_recovery(winner: Fighter):
 
 ---
 
-## Phase 11 — 打击感与表现力
+## Phase 11 — 角色精灵与视觉升级
 
-### 11.1 Hitstop 增强
+> **目标**：将程序化几何图形绘制（`pygame.draw.rect/circle`）替换为精灵表（Sprite Sheet）驱动的像素动画，使角色视觉达到可发行的格斗游戏标准。
+
+### 11.1 当前状态分析
+
+| 维度 | 现状 | 问题 |
+|------|------|------|
+| 绘制方式 | `pygame.draw` 几何图形 | 方形身体、圆形头部、无纹理 |
+| 动画帧数 | 每状态 1-2 帧 | IDLE 只有 1 帧，无呼吸感 |
+| 角色区分 | 仅颜色不同（蓝/红） | 两名战士外形完全相同 |
+| 精灵表 | 无 | 不支持从图片加载帧 |
+| 分辨率 | 50×80 px | 偏小，细节不足 |
+
+### 11.2 精灵表系统架构
+
+#### SpriteSheet 加载器
+
+```python
+# sprites.py — 精灵表管理
+import pygame
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class SpriteFrame:
+    """精灵表中的单帧引用"""
+    sheet_name: str        # 精灵表文件名
+    src_rect: pygame.Rect  # 在精灵表中的矩形区域
+    pivot_x: float = 0.5   # 水平锚点（0~1，0.5=居中）
+    pivot_y: float = 1.0   # 垂直锚点（1.0=底部）
+
+class SpriteSheet:
+    """单个精灵表（PNG），管理纹理和帧提取"""
+    
+    def __init__(self, path: str):
+        self._surface = pygame.image.load(path).convert_alpha()
+        self._width = self._surface.get_width()
+        self._height = self._surface.get_height()
+    
+    def get_frame(self, rect: pygame.Rect) -> pygame.Surface:
+        """提取指定矩形区域的子表面"""
+        return self._surface.subsurface(rect)
+    
+    def slice_grid(self, frame_w: int, frame_h: int,
+                   rows: int, cols: int) -> list[pygame.Rect]:
+        """按网格切片，返回所有帧的 Rect 列表"""
+        rects = []
+        for row in range(rows):
+            for col in range(cols):
+                rects.append(pygame.Rect(
+                    col * frame_w, row * frame_h, frame_w, frame_h
+                ))
+        return rects
+
+class SpriteManager:
+    """全局精灵表管理器（单例），缓存已加载的精灵表"""
+    _sheets: dict[str, SpriteSheet] = {}
+    
+    @classmethod
+    def load(cls, name: str, path: str) -> SpriteSheet:
+        if name not in cls._sheets:
+            cls._sheets[name] = SpriteSheet(path)
+        return cls._sheets[name]
+    
+    @classmethod
+    def get(cls, name: str) -> Optional[SpriteSheet]:
+        return cls._sheets.get(name)
+```
+
+#### AnimFrame 扩展
+
+当前 `AnimFrame` 已有 `draw_func` / `duration` / `hitboxes` / `hurtboxes`，需新增以下字段：
+
+```python
+# animation.py — AnimFrame 新增字段
+sprite: Optional['SpriteFrame'] = None  # 精灵表帧引用（非 None 时优先精灵绘制）
+event: Optional[str] = None             # 帧事件标记（如 "hit_active", "sfx_swing"）
+```
+
+`Animator.draw()` 新增精灵绘制分支（插入在现有 `draw_func` 分支之前）：
+
+```python
+def draw(self, surface, x, y, facing_right, **kwargs):
+    frame = self._current.current_frame_data
+    if frame.sprite is not None:
+        # ── 精灵绘制（新增）──
+        sheet = SpriteManager.get(frame.sprite.sheet_name)
+        src = sheet.get_frame(frame.sprite.src_rect)
+        if not facing_right:
+            src = pygame.transform.flip(src, True, False)
+        draw_x = x - frame.sprite.pivot_x * frame.sprite.src_rect.width
+        draw_y = y - frame.sprite.pivot_y * frame.sprite.src_rect.height
+        surface.blit(src, (draw_x, draw_y))
+    elif frame.draw_func is not None:
+        # ── 程序化绘制（保留）──
+        frame.draw_func(surface, x, y, facing_right, **kwargs)
+```
+
+### 11.3 角色精灵表规范
+
+#### 精灵表布局（每角色一张 PNG）
+
+```
+┌────────────────────────────────────────────────────┐
+│  idle_0 │ idle_1 │ idle_2 │ idle_3 │ walk_0 │ ... │
+│  walk_1 │ walk_2 │ walk_3 │ jump_0 │jump_1 │ ... │
+│  atk_a0 │ atk_a1 │ atk_a2 │ atk_b0 │ atk_b1 │ ... │
+│  crouch │ cr_atk │ hit_0  │ hit_1  │ block  │ ... │
+│  ...                                              │
+└────────────────────────────────────────────────────┘
+每格 = 128×128 px（留足动画空间，含武器/特效延伸）
+```
+
+#### 动画帧数据 JSON
+
+```json
+// data/sprites/default/animations.json
+{
+    "idle": {
+        "loop": true,
+        "frames": [
+            {"sprite": "default", "rect": [0, 0, 128, 128], "duration": 20},
+            {"sprite": "default", "rect": [128, 0, 128, 128], "duration": 6},
+            {"sprite": "default", "rect": [256, 0, 128, 128], "duration": 6},
+            {"sprite": "default", "rect": [128, 0, 128, 128], "duration": 6}
+        ]
+    },
+    "walk": {
+        "loop": true,
+        "frames": [
+            {"sprite": "default", "rect": [384, 0, 128, 128], "duration": 8},
+            {"sprite": "default", "rect": [512, 0, 128, 128], "duration": 6},
+            {"sprite": "default", "rect": [640, 0, 128, 128], "duration": 6},
+            {"sprite": "default", "rect": [768, 0, 128, 128], "duration": 6}
+        ]
+    },
+    "attack_lp": {
+        "loop": false,
+        "frames": [
+            {"sprite": "default", "rect": [0, 128, 128, 128], "duration": 3},
+            {"sprite": "default", "rect": [128, 128, 128, 128], "duration": 2, "event": "hit_active"},
+            {"sprite": "default", "rect": [256, 128, 128, 128], "duration": 4}
+        ]
+    }
+}
+```
+
+### 11.4 精灵制作方案
+
+#### 方案 A：Aseprite 手绘（推荐）
+
+- 工具：[Aseprite](https://www.aseprite.org/)（~$20，像素动画行业标准）
+- 分辨率：128×128 px 每帧
+- 色彩：16 色调色板（KOF 风格限制色板）
+- 导出：PNG sprite sheet（Aseprite 内置功能）
+- 角色设计：每个角色 ~50-80 帧
+
+```
+帧预算（每个角色）：
+  待机 (idle)       : 4 帧 × 2 (呼吸)    = 8
+  走路 (walk)       : 6 帧               = 6
+  蹲姿 (crouch)     : 2 帧               = 2
+  跳跃 (jump)       : 4 帧               = 4
+  轻拳 (lp)         : 4 帧               = 4
+  轻脚 (lk)         : 4 帧               = 4
+  重拳 (hp)         : 5 帧               = 5
+  重脚 (hk)         : 6 帧               = 6
+  蹲轻拳 (cr_lp)    : 4 帧               = 4
+  蹲轻脚 (cr_lk)    : 4 帧               = 4
+  蹲重拳 (cr_hp)    : 5 帧               = 5
+  蹲重脚 (cr_hk)    : 6 帧               = 6
+  跳轻拳 (j_lp)     : 3 帧               = 3
+  跳重拳 (j_hp)     : 4 帧               = 4
+  跳轻脚 (j_lk)     : 3 帧               = 3
+  跳重脚 (j_hk)     : 4 帧               = 4
+  受击 (hit)        : 3 帧               = 3
+  倒地 (knockdown)  : 4 帧               = 4
+  起身 (getup)      : 4 帧               = 4
+  防御 (block)      : 2 帧               = 2
+  胜利 (win)        : 6 帧               = 6
+  ─────────────────────────────────
+  合计                                  ~87 帧
+```
+
+#### 方案 B：程序化升级（快速方案）
+
+如果暂时没有美术资源，先优化当前的程序化绘制：
+
+```python
+def draw_fighter_v2(surface, x, y, facing_right, color, dark_color, state):
+    """升级版程序化绘制 — 更多细节、关节、阴影"""
+    # 身体：梯形取代矩形（肩宽腰窄）
+    # 头部：椭圆 + 眼睛 + 头发轮廓
+    # 四肢：分段绘制（上臂/前臂、大腿/小腿）
+    # 阴影：身体下部略微变暗
+    # 关节：膝盖/肘部加圆形关节
+    # 服装线：添加腰带/袖口线条
+```
+
+#### 方案 C：AI 辅助生成
+
+1. 使用 AI 像素画工具（如 PixelLab、Aseprite + Stable Diffusion 插件）
+2. 生成基础角色精灵
+3. 手动修整和调色
+4. 导出为统一规格的精灵表
+
+```
+工作流：
+  1. AI 生成 idle 关键帧 → Aseprite 调整
+  2. 手动补间（tweening）生成中间帧
+  3. 为每个动作绘制关键帧 → AI 辅助补间
+  4. 统一调色板 → 导出 PNG sprite sheet
+```
+
+### 11.5 精灵制作管线
+
+```
+角色设计文档
+    │
+    ├─ 概念图（草图/参考）
+    ├─ 调色板定义（16-32 色）
+    ├─ 身高比例标准（几头身）
+    └─ 动作列表（帧数/关键姿势）
+          │
+          ▼
+    Aseprite 逐帧绘制
+          │
+          ├─ 线稿（outline）
+          ├─ 平涂（base color）
+          ├─ 阴影（shading）
+          └─ 高光（highlight）
+          │
+          ▼
+    导出 sprite sheet PNG + JSON 动画数据
+          │
+          ▼
+    游戏中加载 → SpriteManager → Animator
+```
+
+### 11.6 实施步骤
+
+#### 11.6.1 精灵基础设施（1-2 周）
+
+- [ ] `sprites.py` — SpriteSheet / SpriteFrame / SpriteManager
+- [ ] `animation.py` — AnimFrame 扩展支持 SpriteFrame
+- [ ] `fighter_animations.py` — 新增 `make_fighter_animator_from_sprites(char_id)`
+- [ ] 精灵数据 JSON schema 定义
+
+#### 11.6.2 默认角色精灵（2-3 周）
+
+- [ ] 设计/绘制 2 个基础角色精灵表（P1/P2 各一个不同外观）
+- [ ] 覆盖核心动画：idle / walk / jump / attack / crouch / hit / block
+- [ ] 程序化绘制作为 fallback（精灵缺失时不崩溃）
+- [ ] HUD 头像/角色选择图标
+
+#### 11.6.3 动画打磨（1-2 周）
+
+- [ ] 待机呼吸动画（至少 4 帧循环）
+- [ ] 攻击动画帧事件（hitbox 激活/消失精确到帧）
+- [ ] 受击过渡（hit → 待机 smooth transition）
+- [ ] 方向翻转精确锚点（左右翻转时脚底对齐）
+- [ ] 颜色替换 / 调色板交换（换色系统，一套精灵支持多配色）
+
+#### 11.6.4 舞台背景（1 周）
+
+- [ ] 静态背景图片加载
+- [ ] 前景/背景分层
+- [ ] 舞台地面线
+- [ ] 简单视差滚动
+
+### 11.7 精灵资源规格标准
+
+```
+┌─────────────────────────────────────────┐
+│ 项目            │ 规格                  │
+├─────────────────────────────────────────┤
+│ 精灵表格式      │ PNG (RGBA, 32-bit)    │
+│ 帧尺寸          │ 128×128 px            │
+│ 角色实际高度    │ ~96 px (6头身)        │
+│ 游戏内显示尺寸  │ 128×128 (高清)        │
+│ 色彩深度        │ 16 色调色板           │
+│ 导出工具        │ Aseprite v1.3+        │
+│ 动画帧率        │ 60fps (逻辑)          │
+│ 动画数据        │ JSON (rect + duration) │
+│ 精灵表布局      │ 按行动作分行排列       │
+└─────────────────────────────────────────┘
+```
+
+### 11.8 可选：使用开源精灵资源
+
+如果无法自行绘制，可考虑以下资源：
+
+| 资源 | 说明 | 授权 |
+|------|------|------|
+| [Universal LPC Sprites](https://github.com/Universal-LPC-Sprites-Project) | 通用 RPG 角色精灵（需适配格斗动作） | CC-BY-SA |
+| [Fighter Sprite Sheet](https://opengameart.org/) (OpenGameArt) | 社区格斗精灵 | 各种开源 |
+| [Chibisuke](https://chibisuke.itch.io/) | Itch.io 格斗游戏素材包 | 付费/免费 |
+| 自绘 | 16×16 基础 → 放大到 128×128 + 修边 | 自有版权 |
+
+> **注意**：使用第三方资源前务必检查授权条款，商用项目需确认可商用许可。
+
+---
+
+## Phase 12 — 打击感与表现力
+
+### 12.1 Hitstop 增强
 
 | 攻击类型 | Hitstop (双方)|
 |----------|--------------|
@@ -783,7 +1094,7 @@ def apply_round_recovery(winner: Fighter):
 
 Hitstop 期间画面短暂定格（除 UI 外），屏幕震动。
 
-### 11.2 屏幕震动
+### 12.2 屏幕震动
 
 ```python
 @dataclass
@@ -805,7 +1116,7 @@ class ScreenShake:
 - 超必杀命中：intensity=10, duration=20
 - KO：intensity=16, duration=30
 
-### 11.3 粒子效果
+### 12.3 粒子效果
 
 ```python
 class ParticleType(Enum):
@@ -817,7 +1128,7 @@ class ParticleType(Enum):
     SUPER_FLASH = auto()    # 超必杀暗转特效
 ```
 
-### 11.4 超必杀暗转（Super Freeze）
+### 12.4 超必杀暗转（Super Freeze）
 
 超必杀发动时：
 1. 画面变暗（半透明黑色覆盖层）
@@ -844,9 +1155,9 @@ class SuperFreeze:
 
 ---
 
-## Phase 12 — 音效系统
+## Phase 13 — 音效系统
 
-### 12.1 音效分级
+### 13.1 音效分级
 
 ```
 优先级 (Channel 0 最高):
@@ -857,7 +1168,7 @@ Channel 3: 移动、跳跃、菜单
 Channel 4: 背景音乐
 ```
 
-### 12.2 最少音效列表
+### 13.2 最少音效列表
 
 | 分类 | 音效 | 数量 |
 |------|------|------|
@@ -874,7 +1185,7 @@ Channel 4: 背景音乐
 
 ```
 Phase 1   [完成] 战斗核心：Hitbox/Hurtbox / 防御 / 硬直 / 击退 / 帧数据 / FSM
-Phase 2   [2-3周] 4 键系统：Action 扩展 / 组合键 / 蹲姿 / 近远普攻判定
+Phase 2   [完成] 4 键系统：Action 扩展 / 组合键 / 蹲姿 / 近远普攻判定
 Phase 3   [1-2周] 移动系统：Dash/Backdash / Hop/超跳 / 跑跳
 Phase 4   [2-3周] 必杀技：指令识别引擎 / 波动/升龙/蓄力 / 角色招式库
 Phase 5   [1-2周] 能量槽：Power Gauge / MAX 模式 / 超必杀 / 防御取消
@@ -883,11 +1194,12 @@ Phase 7   [1-2周] 防御扩展：蹲防/站防规则 / 中段/下段判定 / Do
 Phase 8   [1-2周] 连招深化：ComboTracker / 伤害衰减 / Cancel 层级
 Phase 9   [2-3周] 组队对战：Team / 角色选择 / 回合流转 / 回血
 Phase 10  [1-2周] 角色数据：角色 JSON 定义 / 招式数据库 / 初始 6 角色
-Phase 11  [2-3周] 表现力：粒子 / 震动 / 暗转 / 相机 / 精灵表 / 舞台
-Phase 12  [1-2周] 音效：SoundManager / 分级播放 / 音效资源
+Phase 11  [3-5周] 角色精灵：精灵表系统 / 默认角色精灵 / 动画打磨 / 舞台背景
+Phase 12  [2-3周] 表现力：粒子 / 震动 / 暗转 / 相机 / Hitstop 调优
+Phase 13  [1-2周] 音效：SoundManager / 分级播放 / 音效资源
 工程改进  [穿插] 事件总线 / SOCD / 负边沿 / Schema 校验 / 手柄
 
-总计估算：16～28 周（单人全职）
+总计估算：20～33 周（单人全职）
 ```
 
 ---

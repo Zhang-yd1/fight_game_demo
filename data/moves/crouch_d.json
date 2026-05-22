@@ -1,0 +1,74 @@
+{
+  "name": "Crouch HK",
+  "startup": 8,
+  "active": 4,
+  "recovery": 12,
+  "frames": [
+    {
+      "stage": "startup",
+      "duration": 8,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 20,
+          "width": 30,
+          "height": 58,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "active",
+      "duration": 4,
+      "hitboxes": [
+        {
+          "offset_x": 55,
+          "offset_y": 45,
+          "width": 50,
+          "height": 16,
+          "type": "hit",
+          "damage": 12,
+          "knockback_x": 4.0,
+          "knockback_y": -3.0,
+          "hitstun": 18,
+          "blockstun": 12,
+          "hitstop": 10,
+          "chip_damage": 0,
+          "attacker_hitstop": 10,
+          "hit_id": 0
+        }
+      ],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 20,
+          "width": 30,
+          "height": 58,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "duration": 12,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 20,
+          "width": 30,
+          "height": 58,
+          "type": "hurt"
+        }
+      ]
+    }
+  ],
+  "cancel_into": [],
+  "cancel_window": [
+    0,
+    0
+  ],
+  "on_hit": 0,
+  "on_block": 0
+}

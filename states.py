@@ -7,12 +7,15 @@ import pygame
 from config import (
     SCREEN_W, SCREEN_H, FPS, ROUND_DURATION_SECS,
     BLUE, RED, DARK_BLUE, DARK_RED, GRAY,
-    FIGHTER_W,
+    FIGHTER_W, HOP_THRESHOLD, HOP_VEL_Y,
+    METER_GAIN_HIT, METER_GAIN_BLOCK,
+    MAX_MODE_DAMAGE_MULT,
 )
 from fighter import Fighter
 from input_system import Action
 from collision import check_hitbox_hurtbox
-from action_fsm import TECH_RECOVERY
+from action_fsm import ActionState, TECH_RECOVERY
+from motion_input import check_special_move
 from render import (
     draw_background, draw_hud, draw_result,
     draw_menu, draw_pause_overlay,
@@ -103,20 +106,29 @@ def check_attack(attacker: Fighter, defender: Fighter):
 
     attacker.connected_hit_ids.add(hitbox.hit_id)
 
+    # MAX 模式攻击力加成
+    damage = hitbox.damage
+    if attacker.max_mode:
+        damage = max(1, int(damage * MAX_MODE_DAMAGE_MULT))
+
     # 击退方向：始终远离攻击方面向
     kb_x = hitbox.knockback_x if attacker.facing_right else -hitbox.knockback_x
 
     if defender.is_blocking:
         defender.apply_block(hitbox)
-        # 防御也有 hitstop（较短）
+        # 防御涨气
+        defender.add_meter(METER_GAIN_BLOCK)
+        attacker.add_meter(METER_GAIN_BLOCK // 2)
         a_stop = hitbox.attacker_hitstop if hitbox.attacker_hitstop > 0 else hitbox.hitstop
         attacker.hitstop = max(1, a_stop // 2)
         defender.hitstop = max(1, hitbox.hitstop // 2)
     else:
         defender.take_damage(
-            hitbox.damage, hitbox.hitstun,
+            damage, hitbox.hitstun,
             kb_x, hitbox.knockback_y, hitbox.hitstop,
         )
+        # 命中涨气
+        attacker.add_meter(METER_GAIN_HIT)
         a_stop = hitbox.attacker_hitstop if hitbox.attacker_hitstop > 0 else hitbox.hitstop
         attacker.hitstop = a_stop
 
@@ -145,6 +157,62 @@ class MenuState(GameState):
 class FightState(GameState):
     """对战进行中"""
 
+    def _handle_player_input(self, player: Fighter, inp: 'InputManager',
+                              opponent: Fighter):
+        """处理单个玩家的输入（移动 / 跳跃 / 攻击）"""
+        # ── dash / backdash 检测（仅在方向键刚按下时触发）──
+        if player.fsm.can_move():
+            if inp.just_pressed(Action.MOVE_RIGHT) or inp.just_pressed(Action.MOVE_LEFT):
+                dash_dir = inp.dir_buffer.check_dash()
+                if dash_dir == 1:
+                    player.start_dash()
+                elif dash_dir == -1:
+                    player.start_backdash()
+
+        # ── 移动：IDLE / WALK / BLOCK 状态允许 ──
+        if player.fsm.can_move():
+            if inp.is_held(Action.MOVE_LEFT):
+                player.move(-1)
+            if inp.is_held(Action.MOVE_RIGHT):
+                player.move(+1)
+
+        # ── 跳跃：可行动时（含蹲姿）──
+        if player.is_actionable():
+            if inp.just_pressed(Action.MOVE_UP):
+                # 先检查 super jump（↓→↑）
+                if inp.dir_buffer.check_super_jump():
+                    player.start_super_jump()
+                else:
+                    player.jump()
+
+        # ── 跳跃变体：松开上方向时根据按住帧数判定 hop ──
+        if not player.on_ground and player._jump_type == "":
+            if inp.just_released(Action.MOVE_UP):
+                held = inp.up_held_frames()
+                if 0 < held <= HOP_THRESHOLD:
+                    player._jump_type = "hop"
+                    player.vel_y = HOP_VEL_Y
+
+        # ── MAX 发动（A+B+C）──
+        if player.is_actionable():
+            if inp.just_pressed(Action.MAX_ACTIVATE):
+                player.activate_max()
+
+        # ── 攻击（必杀技优先检测）──
+        if player.is_actionable() or player.fsm.can_dash_cancel():
+            for btn in (Action.LIGHT_PUNCH, Action.LIGHT_KICK,
+                        Action.HEAVY_PUNCH, Action.HEAVY_KICK):
+                if not inp.just_pressed(btn):
+                    continue
+                # 先检测必杀技指令
+                special = check_special_move(inp.buffer, inp.dir_buffer, btn)
+                if special is not None:
+                    player.start_special(special)
+                else:
+                    btn_map = {Action.LIGHT_PUNCH: "a", Action.LIGHT_KICK: "b",
+                               Action.HEAVY_PUNCH: "c", Action.HEAVY_KICK: "d"}
+                    player.attack(btn_map[btn])
+
     def update(self, ctx: GameContext) -> Optional[str]:
         p1 = ctx.input_p1
         p2 = ctx.input_p2
@@ -153,42 +221,22 @@ class FightState(GameState):
         if p1.just_pressed(Action.PAUSE) or p2.just_pressed(Action.PAUSE):
             return StateID.PAUSE
 
-        # ── 玩家1 输入 ──
-        # 移动：地面状态允许（含防御姿态后退）
-        if ctx.p1.fsm.state.is_grounded:
-            if p1.is_held(Action.MOVE_LEFT):
-                ctx.p1.move(-1)
-            if p1.is_held(Action.MOVE_RIGHT):
-                ctx.p1.move(+1)
-        # 攻击 / 跳跃：仅完全可行动时
-        if ctx.p1.is_actionable():
-            if p1.just_pressed(Action.JUMP):
-                ctx.p1.jump()
-            if p1.is_held(Action.ATTACK):
-                ctx.p1.attack()
+        # ── 玩家输入 ──
+        self._handle_player_input(ctx.p1, ctx.input_p1, ctx.p2)
+        self._handle_player_input(ctx.p2, ctx.input_p2, ctx.p1)
 
-        # ── 玩家2 输入 ──
-        if ctx.p2.fsm.state.is_grounded:
-            if p2.is_held(Action.MOVE_LEFT):
-                ctx.p2.move(-1)
-            if p2.is_held(Action.MOVE_RIGHT):
-                ctx.p2.move(+1)
-        if ctx.p2.is_actionable():
-            if p2.just_pressed(Action.JUMP):
-                ctx.p2.jump()
-            if p2.is_held(Action.ATTACK):
-                ctx.p2.attack()
-
-        # ── 防御判定（必须在碰撞检测之前）──
+        # ── 防御 / 蹲姿判定（必须在碰撞检测之前）──
         ctx.p1.check_blocking(
             ctx.p2.x,
             p1.is_held(Action.MOVE_LEFT),
             p1.is_held(Action.MOVE_RIGHT),
+            p1.is_held(Action.MOVE_DOWN),
         )
         ctx.p2.check_blocking(
             ctx.p1.x,
             p2.is_held(Action.MOVE_LEFT),
             p2.is_held(Action.MOVE_RIGHT),
+            p2.is_held(Action.MOVE_DOWN),
         )
 
         # ── 碰撞检测（必须在 update 之前）──
@@ -242,7 +290,7 @@ class FightState(GameState):
         draw_hud(ctx.screen, ctx.p1, ctx.p2, ctx.fonts['hud'], ctx.round_timer)
 
         guide = ctx.fonts['guide'].render(
-            "玩家1: A/D 移动  W 跳  F 攻击      玩家2: ←/→ 移动  ↑ 跳  小键盘0 攻击",
+            "P1: WASD移动 J=LP K=LK U=HP I=HK    P2: 方向键移动 小键盘1=LP 2=LK 4=HP 5=HK",
             True, GRAY)
         ctx.screen.blit(guide, (
             SCREEN_W // 2 - guide.get_width() // 2,

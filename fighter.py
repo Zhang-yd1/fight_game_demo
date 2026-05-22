@@ -4,16 +4,22 @@ import pygame
 from config import (
     FIGHTER_W, FIGHTER_H, GROUND_Y, SCREEN_W, SCREEN_H,
     GRAVITY, JUMP_SPEED, MAX_HEALTH, MOVE_SPEED,
-    ATTACK_DURATION, ATTACK_COOLDOWN,
+    ATTACK_COOLDOWN,
     HIT_FLASH_FRAMES, HUD_BAR_W, HUD_BAR_H,
     MAX_BLOCK_HEALTH, CHIP_DAMAGE_RATIO, GUARD_BREAK_STUN,
     KNOCKBACK_FRICTION, KNOCKBACK_CORNER_MARGIN, KNOCKBACK_CORNER_FACTOR,
+    DASH_SPEED, DASH_DURATION, BACKDASH_DURATION, BACKDASH_INVULN,
+    HOP_VEL_Y, SUPER_JUMP_VEL_Y, HOP_THRESHOLD,
+    METER_PER_STOCK, MAX_POWER_STOCKS,
+    METER_GAIN_HIT, METER_GAIN_GOT_HIT, METER_GAIN_BLOCK, METER_GAIN_SPECIAL, METER_GAIN_WALK,
+    MAX_MODE_DURATION, MAX_MODE_DAMAGE_MULT, MAX_MODE_DEFENSE_MULT,
+    MAX_HEALTH_THRESHOLD,
     WHITE, DARK_GRAY, GREEN, YELLOW, ORANGE, GRAY,
 )
 from animation import Animator
 from fighter_animations import make_fighter_animator
 from collision import CollisionBox
-from move_data import MoveData, DEFAULT_MOVE
+from move_data import MoveData, DEFAULT_MOVE, load_move
 from action_fsm import ActionFSM, ActionState, TECH_WINDOW, TECH_RECOVERY
 
 
@@ -46,6 +52,8 @@ class Fighter:
 
         # ── 防御系统 ──
         self.is_blocking = False
+        self.is_crouching = False
+        self.is_crouch_blocking = False
         self.blockstun = 0
         self.block_health = MAX_BLOCK_HEALTH
         self.guard_broken = False
@@ -57,6 +65,16 @@ class Fighter:
 
         # 动作状态机
         self.fsm = ActionFSM()
+
+        # ── 移动系统 ──
+        self.dash_timer = 0          # dash/backdash 剩余帧数
+        self._dash_dir = 0           # 1=前冲, -1=后撤步
+        self._jump_type: str = ""    # "hop" / "super" / "" → normal jump
+
+        # ── 能量系统 ──
+        self.power_gauge: int = 0           # 0 ~ METER_PER_STOCK * MAX_POWER_STOCKS
+        self.max_mode: bool = False          # MAX 状态
+        self.max_timer: int = 0              # MAX 剩余帧数
 
         # 动画系统
         self.animator: Animator = make_fighter_animator()
@@ -122,14 +140,123 @@ class Fighter:
         self.facing_right = (direction > 0)
 
     def jump(self):
+        """普跳：标准跳跃"""
         if self.on_ground:
+            self._jump_type = ""
             self.vel_y = JUMP_SPEED
             self.on_ground = False
 
-    def attack(self):
-        """向后兼容：使用默认招式"""
-        if DEFAULT_MOVE is not None:
-            self.start_move(DEFAULT_MOVE)
+    def start_hop(self):
+        """小跳：轻点上方向，低轨道快速落地"""
+        if self.on_ground:
+            self._jump_type = "hop"
+            self.vel_y = HOP_VEL_Y
+            self.on_ground = False
+
+    def start_super_jump(self):
+        """超跳：↓→↑ 或跑动中起跳，更高更远"""
+        if self.on_ground:
+            self._jump_type = "super"
+            self.vel_y = SUPER_JUMP_VEL_Y
+            self.on_ground = False
+
+    def start_dash(self):
+        """前冲：→→ 快速前移"""
+        if not self.on_ground:
+            return
+        self._dash_dir = 1
+        self.dash_timer = DASH_DURATION
+        self.vel_x = DASH_SPEED if self.facing_right else -DASH_SPEED
+        self._jump_type = ""
+
+    def start_backdash(self):
+        """后撤步：←← 快速后退，前 N 帧无敌"""
+        if not self.on_ground:
+            return
+        self._dash_dir = -1
+        self.dash_timer = BACKDASH_DURATION
+        self.vel_x = -DASH_SPEED if self.facing_right else DASH_SPEED
+        self._jump_type = ""
+
+    # ── 能量系统 ──
+
+    @property
+    def power_stocks(self) -> int:
+        """当前持有的能量条数"""
+        return self.power_gauge // METER_PER_STOCK
+
+    @property
+    def max_power(self) -> int:
+        return METER_PER_STOCK * MAX_POWER_STOCKS
+
+    def add_meter(self, amount: int):
+        if self.max_mode:
+            return  # MAX 模式下不涨气
+        self.power_gauge = min(self.power_gauge + amount, self.max_power)
+
+    def can_use_super(self, cost: int = METER_PER_STOCK) -> bool:
+        return self.power_gauge >= cost
+
+    def consume_meter(self, amount: int):
+        self.power_gauge = max(0, self.power_gauge - amount)
+
+    def activate_max(self) -> bool:
+        """发动 MAX 模式：需要体力 ≤ 25% 且至少 1 条气"""
+        if self.health > MAX_HEALTH * MAX_HEALTH_THRESHOLD:
+            return False
+        if self.power_gauge < METER_PER_STOCK:
+            return False
+        self.max_mode = True
+        self.max_timer = MAX_MODE_DURATION
+        self.power_gauge = 0
+        return True
+
+    def deactivate_max(self):
+        self.max_mode = False
+        self.max_timer = 0
+
+    def start_special(self, move_name: str):
+        """加载并发动必杀技/超必杀技。处理气量消耗。"""
+        try:
+            move = load_move(move_name)
+        except FileNotFoundError:
+            return
+        # 超必杀技需要消耗气
+        if move.meter_cost > 0:
+            if not self.can_use_super(move.meter_cost):
+                return
+            self.consume_meter(move.meter_cost)
+        # 发动招式后获得微量气
+        if move.move_type == "special":
+            self.add_meter(METER_GAIN_SPECIAL)
+        self.start_move(move)
+
+    # 近身判定距离
+    PROXIMITY_THRESHOLD = 80
+
+    def attack(self, button: str = "a"):
+        """按按钮触发普攻。button: 'a'/'b'/'c'/'d'"""
+        move = self._get_normal_move(button)
+        if move is not None:
+            self.start_move(move)
+
+    def _get_normal_move(self, button: str):
+        """根据当前状态选择普攻：蹲姿→crouch_X, 空中→jump_X, 站立→stand_X"""
+        if self.is_crouching:
+            prefix = "crouch"
+        elif not self.on_ground:
+            prefix = "jump"
+        else:
+            prefix = "stand"
+        # 优先加载状态特定招式，失败回退到站姿，再失败用默认
+        try:
+            return load_move(f"{prefix}_{button}")
+        except FileNotFoundError:
+            pass
+        try:
+            return load_move(f"stand_{button}")
+        except FileNotFoundError:
+            return DEFAULT_MOVE
 
     def start_move(self, move: MoveData):
         if self.attack_cooldown > 0:
@@ -137,8 +264,13 @@ class Fighter:
         if self.current_move is not None:
             if not self.fsm.can_cancel_into(self, move.name):
                 return
-        elif not self.is_actionable():
+        elif not self.is_actionable() and not self.fsm.can_cancel_into(self, move.name):
             return
+        # dash cancel: 中断 dash/backdash
+        if self.dash_timer > 0:
+            self.dash_timer = 0
+            self._dash_dir = 0
+            self.vel_x = 0.0
         self.current_move = move
         self.move_frame = 0
         self.attack_cooldown = ATTACK_COOLDOWN
@@ -150,12 +282,17 @@ class Fighter:
                     hitstop: int = 0):
         if self.dead:
             return
+        # MAX 模式防御加成
+        if self.max_mode:
+            amount = max(1, int(amount * MAX_MODE_DEFENSE_MULT))
         self.health = max(0, self.health - amount)
         self.hit_flash = HIT_FLASH_FRAMES
         self.hitstun = hitstun
         self.hitstop = hitstop
         self.knockback_vel = knockback_x
         self.vel_y = knockback_y
+        # 受击涨气
+        self.add_meter(METER_GAIN_GOT_HIT)
         if self.health == 0:
             self.dead = True
 
@@ -166,17 +303,22 @@ class Fighter:
         return self.fsm.can_act()
 
     def check_blocking(self, attacker_x: float,
-                       holding_left: bool, holding_right: bool):
-        """每帧在碰撞检测前调用，更新防御姿态"""
-        if self.is_blocking:
-            # 切回站立姿态重新判定（blockstun 结束后需要）
-            self.is_blocking = False
+                       holding_left: bool, holding_right: bool,
+                       holding_down: bool = False):
+        """每帧在碰撞检测前调用，更新防御 / 蹲姿 / 蹲防姿态"""
+        # 重置
+        self.is_blocking = False
+        self.is_crouch_blocking = False
+        self.is_crouching = False
 
         if not self.on_ground:
             return
         if self.blockstun > 0:
             return
         if self.guard_broken:
+            return
+        # dash/backdash 中不可防御
+        if self.dash_timer > 0:
             return
 
         holding_back = False
@@ -185,7 +327,12 @@ class Fighter:
         elif attacker_x < self.x and holding_right:
             holding_back = True
 
-        if holding_back:
+        if holding_down:
+            if holding_back:
+                self.is_crouch_blocking = True
+            else:
+                self.is_crouching = True
+        elif holding_back:
             self.is_blocking = True
 
     def apply_block(self, hitbox) -> bool:
@@ -238,6 +385,30 @@ class Fighter:
 
         self.clamp_to_screen()
 
+        # 落地时清除 jump 类型标记
+        if self.on_ground:
+            self._jump_type = ""
+
+        # dash / backdash 计时器
+        if self.dash_timer > 0:
+            self.dash_timer -= 1
+            if self.dash_timer == 0:
+                self._dash_dir = 0
+                self.vel_x = 0.0
+
+        # MAX 模式计时器
+        if self.max_mode:
+            self.max_timer -= 1
+            if self.max_timer <= 0:
+                self.deactivate_max()
+
+        # 前进涨气（行走时每帧微量）
+        if self._moving and self.on_ground and self.dash_timer == 0:
+            if not self.is_blocking and not self.is_crouching:
+                self.add_meter(1)  # 实际上是检查是否在向前走
+                # KOF: forward walk gains meter, backward doesn't
+                # Simplified: moving on ground gains meter
+
         # 移动检测（用于走路动画）
         self._moving = abs(self.x - self._prev_x) > 0.01
         self._prev_x = self.x
@@ -277,10 +448,20 @@ class Fighter:
             return "attack"
         if s.is_stunned:
             return "hit"
+        if s == ActionState.DASH:
+            return "dash"
+        if s == ActionState.BACKDASH:
+            return "backdash"
+        if s == ActionState.HOP:
+            return "jump"
+        if s == ActionState.SUPER_JUMP:
+            return "jump"
         if s == ActionState.JUMP:
             return "jump"
-        if s == ActionState.BLOCK:
+        if s in (ActionState.BLOCK, ActionState.CROUCH_BLOCK):
             return "block"
+        if s == ActionState.CROUCH:
+            return "crouch"
         if s == ActionState.WALK:
             return "walk"
         return "idle"

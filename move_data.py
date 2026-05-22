@@ -15,6 +15,7 @@ class MovePhase:
     duration: int
     hitboxes: list = field(default_factory=list)
     hurtboxes: list = field(default_factory=list)
+    invincible: bool = False  # 帧级无敌（如升龙拳 startup）
 
     @classmethod
     def from_dict(cls, d: dict) -> 'MovePhase':
@@ -25,6 +26,7 @@ class MovePhase:
             duration=d["duration"],
             hitboxes=hitboxes,
             hurtboxes=hurtboxes,
+            invincible=d.get("invincible", False),
         )
 
 
@@ -40,6 +42,11 @@ class MoveData:
     cancel_window: tuple = (0, 0)
     on_hit: int = 0
     on_block: int = 0
+    # 新增字段
+    move_type: str = "normal"   # "normal" | "special" | "super" | "command_normal" | "throw"
+    motion_input: str = ""      # 指令标识符，如 "qcf_p"
+    meter_gain: int = 0         # 命中后获得的气量
+    meter_cost: int = 0         # 消耗气量（超必杀）
 
     @property
     def total_frames(self) -> int:
@@ -76,6 +83,10 @@ class MoveData:
             cancel_window=cancel_win,
             on_hit=d.get("on_hit", 0),
             on_block=d.get("on_block", 0),
+            move_type=d.get("type", "normal"),
+            motion_input=d.get("input", ""),
+            meter_gain=d.get("meter_gain", 0),
+            meter_cost=d.get("meter_cost", 0),
         )
 
 
@@ -112,6 +123,6 @@ def load_move(name: str) -> MoveData:
 
 # 默认普攻（模块加载时构建，避免重复 IO）
 try:
-    DEFAULT_MOVE = load_move('stand_punch')
+    DEFAULT_MOVE = load_move('stand_a')
 except FileNotFoundError:
     DEFAULT_MOVE = None

@@ -1,0 +1,50 @@
+{
+    "name": "反波动拳",
+    "type": "special",
+    "input": "hcb_p",
+    "startup": 12,
+    "active": 10,
+    "recovery": 22,
+    "meter_gain": 4,
+    "cancel_into": [],
+    "cancel_window": [0, 0],
+    "on_hit": -4,
+    "on_block": -12,
+    "frames": [
+        {
+            "stage": "startup",
+            "duration": 12,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "active",
+            "duration": 10,
+            "hitboxes": [
+                {
+                    "offset_x": 50, "offset_y": 10,
+                    "width": 48, "height": 35,
+                    "type": "hit",
+                    "damage": 40,
+                    "knockback_x": 3.5, "knockback_y": -3.0,
+                    "hitstun": 20, "blockstun": 12, "hitstop": 10,
+                    "chip_damage": 6, "attacker_hitstop": 8,
+                    "hit_id": 0
+                }
+            ],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        },
+        {
+            "stage": "recovery",
+            "duration": 22,
+            "hitboxes": [],
+            "hurtboxes": [
+                {"offset_x": 10, "offset_y": 0, "width": 30, "height": 78}
+            ]
+        }
+    ]
+}

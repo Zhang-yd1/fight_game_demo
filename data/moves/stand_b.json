@@ -1,0 +1,74 @@
+{
+  "name": "Stand LK",
+  "startup": 4,
+  "active": 2,
+  "recovery": 5,
+  "frames": [
+    {
+      "stage": "startup",
+      "duration": 4,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "active",
+      "duration": 2,
+      "hitboxes": [
+        {
+          "offset_x": 55,
+          "offset_y": 40,
+          "width": 35,
+          "height": 18,
+          "type": "hit",
+          "damage": 6,
+          "knockback_x": 2.5,
+          "knockback_y": -1.5,
+          "hitstun": 13,
+          "blockstun": 8,
+          "hitstop": 6,
+          "chip_damage": 0,
+          "attacker_hitstop": 6,
+          "hit_id": 0
+        }
+      ],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "duration": 5,
+      "hitboxes": [],
+      "hurtboxes": [
+        {
+          "offset_x": 10,
+          "offset_y": 0,
+          "width": 30,
+          "height": 78,
+          "type": "hurt"
+        }
+      ]
+    }
+  ],
+  "cancel_into": [],
+  "cancel_window": [
+    0,
+    0
+  ],
+  "on_hit": 0,
+  "on_block": 0
+}
