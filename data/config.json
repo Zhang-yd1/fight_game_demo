@@ -1,0 +1,88 @@
+{
+    "window": {
+        "width": 800,
+        "height": 600,
+        "title": "格斗游戏",
+        "fps": 60
+    },
+
+    "colors": {
+        "black":     [0, 0, 0],
+        "white":     [255, 255, 255],
+        "red":       [220, 50, 50],
+        "blue":      [50, 100, 220],
+        "dark_red":  [140, 20, 20],
+        "dark_blue": [20, 40, 140],
+        "gray":      [100, 100, 100],
+        "dark_gray": [40, 40, 40],
+        "yellow":    [255, 210, 0],
+        "green":     [50, 200, 80],
+        "orange":    [255, 140, 0]
+    },
+
+    "ground": {
+        "y": 460
+    },
+
+    "physics": {
+        "gravity": 0.7,
+        "jump_speed": -16.0
+    },
+
+    "fighter": {
+        "width": 50,
+        "height": 80,
+        "max_health": 100,
+        "move_speed": 4.5
+    },
+
+    "attack": {
+        "damage": 8,
+        "duration_frames": 12,
+        "cooldown_frames": 30,
+        "arm_width": 40,
+        "arm_height": 20,
+        "hit_flash_frames": 8
+    },
+
+    "block": {
+        "max_block_health": 100,
+        "chip_damage_ratio": 0.15,
+        "guard_break_stun": 60
+    },
+
+    "round": {
+        "duration_secs": 90
+    },
+
+    "hud": {
+        "bar_width": 250,
+        "bar_height": 22,
+        "top_margin": 55
+    },
+
+    "keybinds": {
+        "player1": {
+            "move_left":    "a",
+            "move_right":   "d",
+            "jump":         "w",
+            "attack":       "f",
+            "pause":        "escape",
+            "confirm":      "return",
+            "cancel":       "escape",
+            "rematch":      "r",
+            "quit_to_menu": "q"
+        },
+        "player2": {
+            "move_left":    "left",
+            "move_right":   "right",
+            "jump":         "up",
+            "attack":       "kp0",
+            "pause":        "escape",
+            "confirm":      "return",
+            "cancel":       "escape",
+            "rematch":      "r",
+            "quit_to_menu": "q"
+        }
+    }
+}
